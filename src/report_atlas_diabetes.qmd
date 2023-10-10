@@ -1,0 +1,676 @@
+---
+title: "CUIDADOS Y ATENCIÓN SANITARIA A LA POBLACIÓN CON DIABETES EN (nombre de la CCAA)"
+editor: source
+lang: es
+author: Grupo de Investigación en Ciencia de Datos para Servicios y Políticas de Salud, Instituto Aragonés de Ciencias de la Salud (IACS), Instituto de Investigación Sanitaria de Aragón (IIS). 
+#date: 
+format: 
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 5
+    highlight-style: pygments
+    code-fold: true
+    html-math-method: katex
+execute: 
+  echo: false
+  warning: false
+  cache: false
+---
+```{css, echo = FALSE}
+.justify {
+  text-align: justify !important
+}
+```
+
+::: {.callout-tip appearance="simple"}
+Más información disponible en [AtlasVPM diabetes](https://cienciadedatosysalud.org/atlas/diabetes/)
+
+:::
+
+```{r}
+#| label: load libraries
+
+library(readxl)
+library(dplyr)
+library(Hmisc)
+library(epoxy)
+library(reshape2)
+library(ggtext)
+library(ggplot2)
+library(tidyr)
+library(plotly)
+library(patchwork)
+# set relative datapath
+path <- '../inputs/your_study_ccaa_folder/'
+
+# not show in scientific notation
+options(scipen = 999)
+```
+
+```{r}
+#| label: read .xlsx
+
+indicadores_nombres <- read_excel('../inputs/Indicadores_nombres.xlsx') %>% dplyr::select(`Indicadores cuidados en diabetes`, descripcion_) %>% 
+  rename(descripcion = descripcion_)
+
+```
+
+
+
+## Cuidados a la población con diabetes (último año disponible)
+
+
+```{r}
+#| label: data_descr
+
+tc_casos <- read_excel(paste0(path,'tc_casos_CCAA_2022.xls'))
+
+```
+
+::: {.callout-tip appearance="simple"}
+
+```{epoxy}
+
+En {tc_casos$year}, {tc_casos$casos_diab_pob} diabéticos mayores de 40 años ({round(tc_casos$tc_diab_pob,0)}% de la población mayor de 40) acudieron al menos una vez a su centro de salud en {tc_casos$CCAA}.
+
+Obesidad y diabetes más frecuentes en población con rentas bajas.
+
+```
+
+:::
+
+
+### Cuidados y control de diabetes en <span style='color:#a9a9a9;'>mujeres <span style='color:#050404;'>y <span style='color:#e6c87f;'>hombres <span style='color:#050404;'>(% personas con diabetes)
+
+```{r}
+#| label: perc_diab_bysex
+
+indicadores_te <- data.frame(ind = c("te_hb_reg_DM","te_hb70_DM", "te_hb80_DM", "te_col_ctrl_DM", "te_alb_ctrl_DM", "te_fo_reg_DM", "te_pie_reg_DM"),
+                             descr = c("Registro de HbA1c","HbA1c <7%", 
+                                "HbA1c <8%",
+                                "Colesterol LDL<100mg/dl",
+                                "Albuminuria<30 mg/día",
+                                "Retinografía",
+                                "Exploración pie diabético"))
+
+te_personas_diabetes <- read_excel(paste0(path,'H_M_CASOS_TE_CCAA.xls')) %>% dplyr::select(SEX,indicadores_te$ind) %>% mutate_if(is.numeric, round, digits = 2)
+
+
+te_personas_diabetes <- te_personas_diabetes %>% melt(id = 'SEX')
+te_personas_diabetes <- left_join(x=te_personas_diabetes, y = indicadores_te, by = c("variable" = "ind"))
+te_personas_diabetes$SEX <- factor(te_personas_diabetes$SEX, levels = c("M", "H"))
+nudge_fun <- function(df){
+  ifelse(df$SEX == "H", -(sd(df$value)), sd(df$value))
+}
+
+te_personas_diabetes %>% 
+    mutate(
+    value = ifelse(SEX=="H", value*(1), value*-1), 
+    share = paste0(abs(round(value,0)), "%")
+  ) %>% 
+  ggplot(aes(x = value, y=reorder(descr,abs(value)), label = share)) +
+  geom_col(aes(fill=SEX)) +
+  geom_text(aes(label = share),
+            position = position_nudge(x = nudge_fun(te_personas_diabetes)),
+            size = 4, color = "#444444" 
+  ) +
+  scale_fill_manual(name = "Sexo", values=c("#a9a9a9","#e6c87f")) +
+labs(
+    title = "",
+    x = "", y = ""
+  ) +
+  theme(title = element_text(size = 12), panel.background = element_blank(),axis.line = element_blank(),axis.title = element_text(size = 10), axis.text.y = element_text(size = 10), axis.text.x = element_blank(), legend.position = "none", legend.justification = "center",legend.text = element_text(size = 10),
+        axis.ticks = element_blank())
+
+
+rm(te_personas_diabetes)
+```
+
+### Complicaciones de la diabetes en <span style='color:#a9a9a9;'>mujeres <span style='color:#050404;'>y <span style='color:#e6c87f;'>hombres <span style='color:#050404;'>(casos/1000 personas con diabetes)
+
+```{r}
+#| label: complications_bysex
+
+indicadores_complicaciones <- data.frame(ind = c("te_retino_DM","te_amp_DM", "te_iam_DM", "te_ictus_DM", "te_complic_DM", "te_angina_DM", "te_icc_DM"),
+                             descr = c("Retinopatía","Amputaciones", 
+                                "Infarto agudo de miocardio",
+                                "Ictus",
+                                "Complicaciones agudas de la diabetes",
+                                "Angina",
+                                "Insuficiencia cardiaca congestiva"))
+
+complicaciones_personas_diabetes <- read_excel(paste0(path,'H_M_CASOS_TE_CCAA.xls')) %>% dplyr::select(SEX,indicadores_complicaciones$ind) %>% mutate_if(is.numeric, round, digits = 2)
+
+
+complicaciones_personas_diabetes <- complicaciones_personas_diabetes %>% melt(id = 'SEX')
+complicaciones_personas_diabetes <- left_join(x=complicaciones_personas_diabetes, y = indicadores_complicaciones, by = c("variable" = "ind"))
+complicaciones_personas_diabetes$SEX <- factor(complicaciones_personas_diabetes$SEX, levels = c("M", "H"))
+nudge_fun_ret <- function(df){
+  ifelse(df$SEX == "H", -(sd(df$value))-1.5, sd(df$value)+1.5)
+}
+nudge_fun_otros <- function(df){
+  ifelse(df$SEX == "H", -0.1,-0.2)
+}
+
+retino <- complicaciones_personas_diabetes %>% 
+    mutate(
+    value = ifelse(SEX=="H", value*(1), value*-1), 
+    share = paste0(abs(round(value,1)))
+  ) %>% filter(variable %in% 'te_retino_DM') %>% 
+  ggplot(aes(x = value , y=descr, label = share)) +
+  geom_col(aes(fill=SEX), width = 0.3) +
+  geom_text(aes(label = share),
+            position = position_nudge(x = nudge_fun_ret(complicaciones_personas_diabetes)),
+            size = 4, color = "#444444" 
+  ) +
+  scale_fill_manual(name = "Sexo", values=c("#a9a9a9","#E8D794")) +
+labs(
+    title = "",
+    x = "", y = ""
+  ) +
+  theme(title = element_text(size = 12), panel.background = element_blank(),axis.line = element_blank(),axis.title = element_text(size = 10), axis.text.y = element_text(size = 10), axis.text.x = element_blank(), legend.position = "none", legend.justification = "center",legend.text = element_text(size = 10),
+        axis.ticks = element_blank())
+
+otros_hospitalizaciones <- complicaciones_personas_diabetes %>% 
+    mutate(
+    value = ifelse(SEX=="H", value*(1), value*-1), 
+    share = paste0(abs(round(value,1)))
+  ) %>% filter(variable %nin% 'te_retino_DM') %>% 
+  ggplot(aes(x = value, y=reorder(descr,abs(value)), label = share)) +
+  geom_col(aes(fill=SEX),width = 0.9) +
+  geom_text(aes(label = share),
+            position = position_nudge(x = nudge_fun_otros(complicaciones_personas_diabetes)),
+            size = 4, color = "#444444" 
+  ) +
+  scale_fill_manual(name = "Sexo", values=c("#a9a9a9","#E8D794")) +
+labs(
+    title = "",
+    x = "", y = ""
+  ) +
+  theme(title = element_text(size = 12), panel.background = element_blank(),axis.line = element_blank(),axis.title = element_text(size = 10), axis.text.y = element_text(size = 10), axis.text.x = element_blank(), legend.position = "none", legend.justification = "center",legend.text = element_text(size = 10),
+        axis.ticks = element_blank())
+
+
+```
+
+
+
+::: {.panel-tabset}
+#### Retinopatía
+
+```{r}
+#| label: retino
+retino
+```
+
+#### Hospitalizaciones
+
+```{r}
+#| label: hospitalisations
+otros_hospitalizaciones
+```
+
+:::
+
+
+### Evolución temporal
+
+
+```{r}
+data_ts <- read_excel(paste0(path,'TASA_MEDIA_ST_14_22_REPORT.xlsx'))
+```
+
+
+#### Indicadores contextuales (%)
+
+```{r}
+#| label: ev_ind_contex
+indicadores_contextuales <- data.frame(ind = c("diab_pob","obe_pob", "obe_DM", "cop_pob", "cop_DM", "mort_pob", "mort_DM"))
+indicadores_contextuales <- left_join(indicadores_contextuales, indicadores_nombres , by = c('ind'="Indicadores cuidados en diabetes"))
+
+df_indicadores_contextuales <- data_ts %>% dplyr::filter(indicador %in% indicadores_contextuales$ind) %>% mutate_if(is.numeric, round, digits = 2)
+
+df_indicadores_contextuales <- df_indicadores_contextuales %>%  
+  pivot_longer(!indicador, names_to = 'año', values_to = 'value')
+df_indicadores_contextuales <- left_join(df_indicadores_contextuales, indicadores_contextuales, by = c("indicador"="ind"))
+
+    plot <- ggplot(df_indicadores_contextuales ,aes(x = año, y=value, group = descripcion,  text = paste("Año:", año, "\n% personas con diabetes:", value))) + geom_point(aes(color = descripcion),size=0.5) +
+  geom_line(aes(color = descripcion)) +
+    labs(title = '',
+       y = '',
+       x = '',
+       color=NULL) +
+      theme(legend.position = 'bottom', legend.text = element_text(size=8.5), panel.background = element_blank())
+        plot <- ggplotly(plot, tooltip = 'text') %>% 
+  layout(title = list(text = paste0('',
+                                    '<br>',
+                                    '<sup>')),
+         legend = list(orientation = "h", y = -0.5)) 
+
+plot
+rm(indicadores_contextuales)
+rm(df_indicadores_contextuales)
+```
+
+
+
+#### Cuidados y resultados de cuidados en diabetes (% personas con diabetes)
+
+```{r}
+#| label: ev_results
+
+ev_cuidados_resultados <- data.frame(ind = c("hb_reg_DM","ta_reg_DM", "col_reg_DM", "alb_reg_DM", "fo_reg_DM", "pie_reg_DM", "gripe_DM","IMC_reg_DM",
+                                             "hb70_DM", "hb80_DM", "ta_ctrl_DM", "col_ctrl_DM", "alb_ctrl_DM"))
+ev_cuidados_resultados <- left_join(ev_cuidados_resultados, indicadores_nombres , by = c('ind'="Indicadores cuidados en diabetes"))
+
+df_ev_cuidados_resultados <- data_ts %>% dplyr::filter(indicador %in% ev_cuidados_resultados$ind) %>% mutate_if(is.numeric, round, digits = 2)
+
+df_ev_cuidados_resultados <- df_ev_cuidados_resultados %>%  
+  pivot_longer(!indicador, names_to = 'año', values_to = 'value')
+df_ev_cuidados_resultados <- left_join(df_ev_cuidados_resultados, ev_cuidados_resultados, by = c("indicador"="ind"))
+
+    plot <- ggplot(df_ev_cuidados_resultados ,aes(x = año, y=value, group = descripcion,  text = paste("Año:", año, "\n", descripcion, ': ',value))) + geom_point(aes(color = descripcion),size=0.5) +
+  geom_line(aes(color = descripcion)) +
+    labs(title = '',
+       y = '',
+       x = '',
+       color=NULL) +
+      theme(legend.position = 'bottom', legend.text = element_text(size=8.5), panel.background = element_blank())
+        plot <- ggplotly(plot, tooltip = 'text') %>% 
+  layout(title = list(text = paste0('',
+                                    '<br>',
+                                    '<sup>')),
+         legend = list(orientation = "h", y = -0.5)) 
+
+plot
+
+rm(ev_cuidados_resultados)
+rm(df_ev_cuidados_resultados)
+
+```
+
+#### Complicaciones (casos/1000 personas con diabetes)
+
+
+```{r}
+#| label: ev_complications
+
+
+ev_complicaciones <- data.frame(ind = c("retino_DM","amp_DM", "amp_menor_DM", "amp_mayor_DM", "iam_DM", "ictus_DM", "complic_DM","angina_DM",
+                                             "icc_DM", "tx_renal_DM"))
+ev_complicaciones <- left_join(ev_complicaciones, indicadores_nombres , by = c('ind'="Indicadores cuidados en diabetes"))
+
+df_ev_complicaciones <- data_ts %>% dplyr::filter(indicador %in% ev_complicaciones$ind) %>% mutate_if(is.numeric, round, digits = 2)
+
+df_ev_complicaciones <- df_ev_complicaciones %>%  
+  pivot_longer(!indicador, names_to = 'año', values_to = 'value')
+df_ev_complicaciones <- left_join(df_ev_complicaciones, ev_complicaciones, by = c("indicador"="ind"))
+
+plot_retino <- df_ev_complicaciones %>% filter(indicador %in% 'retino_DM') %>% 
+      ggplot(aes(x = año, y=value, group = descripcion,  text = paste("Año:", año, "\n",descripcion,": ", value))) + geom_point(aes(color = descripcion),size=0.5) +
+  geom_line(aes(color = descripcion)) +
+    labs(title = '',
+       y = '',
+       x = '',
+       color=NULL) +  
+      theme(legend.position = 'bottom', legend.text = element_text(size=8.5), panel.background = element_blank())
+        plot_retino <- ggplotly(plot_retino, tooltip = 'text') %>% 
+  layout(title = list(text = paste0('',
+                                    '<br>',
+                                    '<sup>')),
+         legend = list(orientation = "h", y = -0.5)) 
+        
+plot_hosp <- df_ev_complicaciones %>% filter(indicador %nin% 'retino_DM') %>% 
+      ggplot(aes(x = año, y=value, group = descripcion,  text = paste("Año:", año, "\n",descripcion,": ", value))) + geom_point(aes(color = descripcion),size=0.5) +
+  geom_line(aes(color = descripcion)) +
+    labs(title = '',
+       y = '',
+       x = '',
+       color=NULL) +  
+      theme(legend.position = 'bottom', legend.text = element_text(size=8.5), panel.background = element_blank())
+        plot_hosp <- ggplotly(plot_hosp, tooltip = 'text') %>% 
+  layout(title = list(text = paste0('',
+                                    '<br>',
+                                    '<sup>')),
+         legend = list(orientation = "h", y = -0.5)) 
+
+
+
+rm(ev_complicaciones)
+rm(df_ev_complicaciones)
+rm(data_ts)
+```
+
+
+
+::: {.panel-tabset}
+#### Retinopatía
+
+```{r}
+#| label: retino_st
+
+plot_retino
+```
+
+#### Hospitalizaciones
+
+```{r}
+#| label: hospitalisations_st
+
+plot_hosp
+```
+
+:::
+
+## Prescripción farmacéutica en la población con diabetes (último año disponible)
+
+
+
+### Porcentaje de personas con diabetes a los que se les prescribió los antidiabéticos más frecuentes
+
+
+```{r}
+#| label: pres_perc_antidiab
+indicadores_antidiabeticos <- data.frame(ind = c("tc_metf","tc_idpp4", "tc_isglt2", "tc_insulina", "tc_glp1", "tc_repa_nate", "tc_sulf","tc_pio"),
+                                         descr = c("Metformina", "iDPP4", "iSGLT2", "Insulina", "arGLP1", "Repa-Nate", "Sulfonilureas", "Pioglitazona"))
+
+df_indicadores_antidiabeticos <- read_excel(paste0(path,'PRESCRIPCIÓN_CCAA_2022.xls')) %>% dplyr::select(CCAA,indicadores_antidiabeticos$ind) %>% mutate_if(is.numeric, round, digits = 2)
+
+df_indicadores_antidiabeticos <- df_indicadores_antidiabeticos %>% melt(id = 'CCAA')
+df_indicadores_antidiabeticos <- left_join(x=df_indicadores_antidiabeticos, y = indicadores_antidiabeticos, by = c("variable" = "ind"))
+
+df_indicadores_antidiabeticos %>% 
+  mutate(share = paste0(abs(round(value,1)), "%")) %>% 
+  ggplot(aes(x = value, y=reorder(descr,value), label = share)) +
+  geom_col(fill = '#e6c87f') +
+  geom_text(aes(label = share), hjust = -0.1,
+            size = 4, color = "#444444") + 
+  xlim(c(0,max(df_indicadores_antidiabeticos$value,na.rm = TRUE)+10))+
+labs(
+    title = "",
+    x = "", y = ""
+  ) +
+  theme(plot.title = element_text(hjust = 0.5),title = element_text(size = 12), panel.background = element_blank(),axis.line = element_blank(),axis.title = element_text(size = 10), axis.text.y = element_text(size = 10), axis.text.x = element_blank(), legend.position = "bottom", legend.justification = "center",legend.text = element_text(size = 10),
+        axis.ticks = element_blank())
+
+rm(df_indicadores_antidiabeticos)
+
+df_indicadores_antidiabeticos <- read_excel(paste0(path,'PRESCRIPCIÓN_CCAA_H_M_2022.xls')) %>% dplyr::select(sexo,indicadores_antidiabeticos$ind) %>% mutate_if(is.numeric, round, digits = 2)
+
+df_indicadores_antidiabeticos <- df_indicadores_antidiabeticos %>% pivot_longer(!sexo,names_to = 'indicador', values_to = 'value')
+df_aux_h <- df_indicadores_antidiabeticos %>% filter(sexo %in% "Hombre") %>% dplyr::select(indicador,value) %>% rename(hombres = value)
+df_aux_m <- df_indicadores_antidiabeticos %>% filter(sexo %in% "Mujer") %>% dplyr::select(indicador,value) %>% rename(mujeres = value)
+df_indicadores_antidiabeticos <- left_join(df_aux_h,df_aux_m, by = "indicador")
+rm(df_aux_h)
+rm(df_aux_m)
+
+df_indicadores_antidiabeticos <- left_join(x=df_indicadores_antidiabeticos, y = indicadores_antidiabeticos, by = c("indicador" = "ind"))
+df_indicadores_antidiabeticos <- df_indicadores_antidiabeticos %>% 
+  mutate(mayor = case_when(
+    hombres > mujeres ~ 'hombres',
+    mujeres > hombres ~ 'mujeres',
+    mujeres == hombres ~ 'igual'
+  ))
+
+hombres <- df_indicadores_antidiabeticos %>% filter(mayor %in% 'hombres')
+if(nrow(hombres)==0){
+  hombres <- 'ningún indicador'
+}else{
+hombres <- paste0(hombres$descr, collapse=", ")
+}
+mujeres <- df_indicadores_antidiabeticos %>% filter(mayor %in% 'mujeres')
+if(nrow(mujeres)==0){
+  mujeres <- 'ningún indicador'
+}else{
+mujeres <- paste0(mujeres$descr, collapse=", ")
+}
+
+igual <- df_indicadores_antidiabeticos %>% filter(mayor %in% 'igual')
+if(nrow(igual)==0){
+  igual <- 'ningún indicador'
+}else{
+igual <- paste0(igual$descr, collapse=", ")
+}
+
+
+```
+
+::: {.callout-tip appearance="simple"}
+
+```{epoxy}
+Mayor prescripción de {hombres} en hombres.
+
+Mayor prescripción de {mujeres} en mujeres.
+```
+
+:::
+
+### Prescripción con beneficio positivo en las comorbilidades del paciente con diabetes
+
+
+```{r}
+indicadores_prescripcion_beneficio <- data.frame(ind = c("tc_erc", "tc_ecv", "tc_icc"),
+                                       descr = c("Personas con diabetes y enfermedad renal crónica",
+                                                 "Personas con diabetes y enfermedad cardiovascular",
+                                                 "Personas con diabetes e insuficiencia cardiaca congestiva"))
+indicadores_prescripcion_beneficio_h_m <- data.frame(ind = c("tc_erc_isglt2_glp1", "tc_ecv_isglt2_glp1", "tc_icc_isglt2"),
+                                       descr = c("Personas con diabetes y enfermedad renal crónica y prescripción de iSGLT2 o de agonistas GLP1",
+                                                 "Personas con diabetes y enfermedad cardiovascular y prescripción de iSGLT2 o agonistas GLP1",
+                                                 "Personas con diabetes e insuficiencia cardiaca congestiva y prescripción de iSGLT2"))
+
+df_indicadores_antidiabeticos <- read_excel(paste0(path,'PRESCRIPCIÓN_CCAA_2022.xls')) %>% dplyr::select(CCAA,indicadores_prescripcion_beneficio$ind) %>% mutate_if(is.numeric, round, digits = 2)
+df_indicadores_antidiabeticos <- df_indicadores_antidiabeticos %>% melt(id = 'CCAA')
+
+df_indicadores_antidiabeticos <- left_join(x=df_indicadores_antidiabeticos, y = indicadores_prescripcion_beneficio, by = c("variable" = "ind"))
+
+
+df_indicadores_antidiabeticos$label <- paste0(round(df_indicadores_antidiabeticos$value,0), " % ")
+
+# plot <- list()
+# circle_plot_function <- function(ind){
+# df_indicadores_antidiabeticos_ <- df_indicadores_antidiabeticos %>% filter(variable %in% ind)
+# df_indicadores_antidiabeticos_$color <- "#e6c87f"
+# p <- rbind(df_indicadores_antidiabeticos_,df_indicadores_antidiabeticos_)
+# p[2,'value'] <- 100-p[1,'value']
+# p[2,'color'] <- "gray90"
+# p$ymax = cumsum(p$value)
+# p$ymin = c(0, head(p$ymax, n=-1))
+# p_ <- ggplot(p, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill = color)) +
+#   geom_rect() +
+#   geom_label(x=2, aes(y=0, label=label), fill = '#e6c87f', size=6) +
+#   coord_polar(theta="y") +
+#   xlim(c(2, 4)) +
+#   labs(title= "")+
+#   scale_fill_identity() +
+#   theme_void() +
+#   theme(legend.position = "none", plot.title = element_text(hjust = 0.7),title = element_text(size = 12))
+# plot[[ind]] <- p_
+# return(plot)
+# }
+# 
+# plot_circle_percent <- lapply(indicadores_prescripcion_beneficio$ind, circle_plot_function)
+# 
+
+
+
+df_indicadores_antidiabeticos_h_m <- read_excel(paste0(path,'PRESCRIPCIÓN_CCAA_H_M_2022.xls')) %>% dplyr::select(sexo,indicadores_prescripcion_beneficio_h_m$ind) %>% mutate_if(is.numeric, round, digits = 2)
+
+df_indicadores_antidiabeticos_h_m <- df_indicadores_antidiabeticos_h_m %>% melt(id = 'sexo')
+df_indicadores_antidiabeticos_h_m <- left_join(x=df_indicadores_antidiabeticos_h_m, y = indicadores_prescripcion_beneficio_h_m, by = c("variable" = "ind"))
+df_indicadores_antidiabeticos_h_m$sexo <- factor(df_indicadores_antidiabeticos_h_m$sexo, levels = c("Mujer", "Hombre"))
+nudge_fun <- function(df){
+  ifelse(df$sexo == "Hombre", -(sd(df$value))/4, sd(df$value)/4)
+}
+
+df_indicadores_antidiabeticos_h_m <- df_indicadores_antidiabeticos_h_m %>% 
+    mutate(
+    value = ifelse(sexo=="Hombre", value*(1), value*-1), 
+    share = paste0(abs(round(value,0)), "%")
+  )
+
+plot <- list()
+plot_h_m_precr_benefit_function <- function(ind){
+df_indicadores_antidiabeticos_h_m_ <- df_indicadores_antidiabeticos_h_m %>% filter(variable %in% ind)
+p <-  ggplot(data = df_indicadores_antidiabeticos_h_m_, aes(x = value, y=descr, label = share)) +
+  geom_col(aes(fill=sexo), width = 0.3) +
+  geom_text(aes(label = share),
+            position = position_nudge(x = nudge_fun(df_indicadores_antidiabeticos_h_m)),
+            size = 4, color = "#444444" 
+  ) +
+  scale_fill_manual(name = "Sexo", values=c("#a9a9a9","#e6c87f")) +
+labs(x = "", y = ""
+  ) +
+  theme(
+    plot.title = element_markdown(lineheight = 1.1, hjust = 0), title = element_text(size = 10), panel.background = element_blank(),axis.line = element_blank(),axis.title = element_text(size = 10), axis.text.y = element_blank(), axis.text.x = element_blank(), legend.position = "none", legend.justification = "center",legend.text = element_text(size = 10),
+        axis.ticks = element_blank())
+plot[[ind]] <- p
+return(plot)
+}
+plot_h_m_precr_benefit <- lapply(indicadores_prescripcion_beneficio_h_m$ind, plot_h_m_precr_benefit_function)
+
+rm(df_indicadores_antidiabeticos_h_m)
+rm(indicadores_prescripcion_beneficio_h_m)
+rm(indicadores_prescripcion_beneficio)
+
+
+
+```
+
+
+#### Personas con diabetes y enfermedad renal crónica
+```{epoxy}
+El {df_indicadores_antidiabeticos$label[1]} de las personas con diabetes tuvieron enfermedad renal crónica. 
+
+```
+
+
+##### Personas con diabetes y enfermedad renal crónica y prescripción de iSGLT2 o de agonistas GLP1 en <span style='color:#a9a9a9;'>mujeres <span style='color:#050404;'>y <span style='color:#e6c87f;'>hombres
+```{r}
+#| label: erc_prescr
+plot_h_m_precr_benefit[[1]]$tc_erc_isglt2_glp1
+
+```
+
+
+
+#### Personas con diabetes y enfermedad cardiovascular
+```{epoxy}
+El {df_indicadores_antidiabeticos$label[2]} de las personas con diabetes tuvieron enfermedad cardiovascular. 
+
+```
+
+##### Personas con diabetes y y enfermedad cardiovascular y prescripción de iSGLT2 o de agonistas GLP1 en <span style='color:#a9a9a9;'>mujeres <span style='color:#050404;'>y <span style='color:#e6c87f;'>hombres
+
+```{r}
+#| label: ecv_prescr
+plot_h_m_precr_benefit[[2]]$tc_ecv_isglt2_glp1
+
+```
+
+
+
+#### Personas con diabetes e insuficiencia cardiaca congestiva
+```{epoxy}
+El {df_indicadores_antidiabeticos$label[3]} de las personas con diabetes tuvieron insuficiencia cardiaca congestiva. 
+
+```
+
+
+##### Personas con diabetes e insuficiencia cardiaca congestiva y prescripción de iSGLT2 en <span style='color:#a9a9a9;'>mujeres <span style='color:#050404;'>y <span style='color:#e6c87f;'>hombres
+
+```{r}
+#| label: icc_prescr
+plot_h_m_precr_benefit[[3]]$tc_icc_isglt2
+
+```
+
+
+
+```{r}
+#| label: comparison
+
+indicadores_prescripcion_beneficio_h_m <- data.frame(ind = c("tc_erc_isglt2_glp1", "tc_ecv_isglt2_glp1", "tc_icc_isglt2"),
+                                       descr = c("enfermedad renal crónica",
+                                                 "enfermedad cardiovascular",
+                                                 "insuficiencia cardiaca"))
+
+df_indicadores_antidiabeticos_h_m <- read_excel(paste0(path,'PRESCRIPCIÓN_CCAA_H_M_2022.xls')) %>% dplyr::select(sexo,indicadores_prescripcion_beneficio_h_m$ind) %>% mutate_if(is.numeric, round, digits = 2)
+
+df_indicadores_antidiabeticos_h_m <- df_indicadores_antidiabeticos_h_m %>% pivot_longer(!sexo,names_to = 'indicador', values_to = 'value')
+df_aux_h <- df_indicadores_antidiabeticos_h_m %>% filter(sexo %in% "Hombre") %>% dplyr::select(indicador,value) %>% rename(hombres = value)
+df_aux_m <- df_indicadores_antidiabeticos_h_m %>% filter(sexo %in% "Mujer") %>% dplyr::select(indicador,value) %>% rename(mujeres = value)
+df_indicadores_antidiabeticos_h_m <- left_join(df_aux_h,df_aux_m, by = "indicador")
+rm(df_aux_h)
+rm(df_aux_m)
+
+df_indicadores_antidiabeticos_h_m <- left_join(x=df_indicadores_antidiabeticos_h_m, y = indicadores_prescripcion_beneficio_h_m, by = c("indicador" = "ind"))
+df_indicadores_antidiabeticos_h_m <- df_indicadores_antidiabeticos_h_m %>% 
+  mutate(mayor = case_when(
+    hombres > mujeres ~ 'hombres',
+    mujeres > hombres ~ 'mujeres',
+    mujeres == hombres ~ 'igual'
+  ))
+
+
+
+hombres <- df_indicadores_antidiabeticos_h_m %>% filter(mayor %in% 'hombres')
+if(nrow(hombres)==0){
+  hombres <- 'ningún indicador'
+}else{
+hombres <- paste0(hombres$descr, collapse=" o ")
+}
+mujeres <- df_indicadores_antidiabeticos_h_m %>% filter(mayor %in% 'mujeres')
+if(nrow(mujeres)==0){
+  mujeres <- 'ningún indicador'
+}else{
+mujeres <- paste0(mujeres$descr, collapse=" o ")
+}
+
+igual <- df_indicadores_antidiabeticos_h_m %>% filter(mayor %in% 'igual')
+if(nrow(igual)==0){
+  igual <- 'ningún indicador'
+}else{
+igual <- paste0(igual$descr, collapse=" o ")
+}
+
+rm(df_indicadores_antidiabeticos_h_m)
+```
+
+
+::: {.callout-tip appearance="simple"}
+
+```{epoxy}
+Los hombres con diabetes y con {hombres} tuvieron una mayor prescripción de iSGLT2 y/o agonistas GLP1 comparado con las mujeres.
+```
+:::
+
+
+
+### Prácticas no recomendadas o de dudoso valor
+
+
+```{r}
+
+df_indicadores_antidiabeticos <- read_excel(paste0(path,'PRESCRIPCIÓN_CCAA_2022.xls'))
+```
+
+::: {.callout-tip appearance="simple"}
+
+```{epoxy}
+
+El {round(df_indicadores_antidiabeticos$tc_inercia,0)}% de los diabéticos menores de 75 años y con HbA1C>8 no tuvieron ningún cambio en el tratamiento farmacológico en los 90 días tras la medición.
+
+{df_indicadores_antidiabeticos$glp1_idpp4} paciente(s) con diabetes tuvieron prescripciones simultáneas de iDPP4 y arGL1.
+
+A {df_indicadores_antidiabeticos$icc_saxa} persona(s) con diabetes e insuficienca cardiaca congestiva se les prescribió saxagliptina.
+
+A {df_indicadores_antidiabeticos$icc_piog} persona(s) con diabetes e insuficienca cardiaca congestiva se les prescribió pioglitazona.
+
+El {round(df_indicadores_antidiabeticos$tc_anciano_sulfo_exglic,1)}% de ancianos ({df_indicadores_antidiabeticos$anciano_sulfo_exglic}) tenían prescrita alguna sulfonilurea distinta a la glicazida.
+```
+:::
+
+
+
+
